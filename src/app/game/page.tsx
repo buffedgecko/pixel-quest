@@ -2,255 +2,260 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useGameStore, calculateHeroStats, MONSTER_DATA } from '@/store/gameStore'
+import { useGameStore, MONSTERS, calculateHeroStats } from '@/store/gameStore'
 
 export default function BattlePage() {
-  const {
-    hero,
-    currentMonster,
-    spawnMonster,
-    attackMonster,
-    isAutoBattle,
-    toggleAutoBattle,
-    battleLog,
-    totalKills,
-    bossKills,
-    tokens,
-  } = useGameStore()
-  
-  const [isAttacking, setIsAttacking] = useState(false)
+  const { hero, addBattleResult, updateHero } = useGameStore()
+  const [isAutoBattle, setIsAutoBattle] = useState(true)
+  const [currentMonster, setCurrentMonster] = useState(0)
+  const [battleLog, setBattleLog] = useState<string[]>([])
+  const [isInBattle, setIsInBattle] = useState(false)
   const [showResult, setShowResult] = useState(false)
-  const [lastReward, setLastReward] = useState({ crystal: 0, exp: 0 })
-  
-  // Spawn monster on mount
+  const [battleResult, setBattleResult] = useState<'win' | 'lose' | null>(null)
+  const [enemyHp, setEnemyHp] = useState(0)
+  const [heroHp, setHeroHp] = useState(0)
+
+  const heroStats = hero ? calculateHeroStats(hero) : null
+  const monster = MONSTERS[currentMonster]
+
   useEffect(() => {
-    if (!currentMonster) {
-      spawnMonster()
+    if (monster) {
+      setEnemyHp(monster.hp)
     }
-  }, [currentMonster, spawnMonster])
-  
-  // Auto battle
+    if (heroStats) {
+      setHeroHp(heroStats.maxHp)
+    }
+  }, [monster, heroStats])
+
+  const startBattle = useCallback(() => {
+    if (!hero || !heroStats || !monster) return
+
+    setIsInBattle(true)
+    setBattleLog([])
+    setShowResult(false)
+    setBattleResult(null)
+
+    let heroCurrentHp = heroStats.maxHp
+    let monsterCurrentHp = monster.hp
+    const logs: string[] = []
+
+    // Simulate battle
+    const battleInterval = setInterval(() => {
+      if (heroCurrentHp <= 0 || monsterCurrentHp <= 0) {
+        clearInterval(battleInterval)
+        
+        const won = monsterCurrentHp <= 0
+        setBattleResult(won ? 'win' : 'lose')
+        setShowResult(true)
+        setIsInBattle(false)
+
+        // Add rewards
+        if (won) {
+          addBattleResult({
+            monsterName: monster.name,
+            xpGained: monster.xpReward,
+            tokensGained: monster.tokenReward,
+            won: true,
+          })
+
+          // Update hero
+          const newXp = hero.exp + monster.xpReward
+          const xpToLevel = hero.level * 100
+          const leveledUp = newXp >= xpToLevel
+
+          updateHero({
+            exp: newXp % xpToLevel,
+            level: leveledUp ? hero.level + 1 : hero.level,
+            pixelTokens: hero.pixelTokens + monster.tokenReward,
+            gold: hero.gold + monster.goldReward,
+          })
+
+          logs.push(`🏆 Victory! +${monster.tokenReward} PIXEL`)
+        } else {
+          logs.push('💀 Defeat! Heal your hero.')
+        }
+
+        setBattleLog(prev => [...prev, ...logs])
+        return
+      }
+
+      // Hero attacks
+      const heroDamage = Math.max(1, heroStats.attack - monster.defense + Math.floor(Math.random() * 10))
+      monsterCurrentHp -= heroDamage
+      logs.push(`⚔️ You dealt ${heroDamage} damage!`)
+      setEnemyHp(Math.max(0, monsterCurrentHp))
+
+      if (monsterCurrentHp <= 0) return
+
+      // Monster attacks
+      const monsterDamage = Math.max(1, monster.attack - heroStats.defense + Math.floor(Math.random() * 5))
+      heroCurrentHp -= monsterDamage
+      logs.push(`🔥 ${monster.name} dealt ${monsterDamage} damage!`)
+      setHeroHp(Math.max(0, heroCurrentHp))
+
+      setBattleLog(prev => [...prev, ...logs.slice(-2)])
+      logs.length = 0
+    }, 800)
+
+    return () => clearInterval(battleInterval)
+  }, [hero, heroStats, monster, addBattleResult, updateHero])
+
+  // Auto-battle effect
   useEffect(() => {
-    if (isAutoBattle && currentMonster && hero?.hp && hero.hp > 0) {
-      const interval = setInterval(() => {
-        handleAttack()
-      }, 2000)
-      return () => clearInterval(interval)
-    }
-  }, [isAutoBattle, currentMonster, hero?.hp])
-  
-  const handleAttack = useCallback(() => {
-    if (!currentMonster || !hero || hero.hp <= 0 || isAttacking) return
+    if (!isAutoBattle || isInBattle || showResult) return
     
-    setIsAttacking(true)
-    setLastReward({ crystal: currentMonster.crystalReward, exp: currentMonster.expReward })
-    attackMonster()
-    
-    setTimeout(() => {
-      setShowResult(true)
-      setIsAttacking(false)
-      setTimeout(() => setShowResult(false), 1500)
-    }, 500)
-  }, [currentMonster, hero, isAttacking, attackMonster])
-  
-  if (!hero) return null
-  
-  const heroStats = calculateHeroStats(hero)
-  
+    const timeout = setTimeout(() => {
+      startBattle()
+    }, 1000)
+
+    return () => clearTimeout(timeout)
+  }, [isAutoBattle, isInBattle, showResult, startBattle])
+
+  if (!hero || !heroStats) return null
+
   return (
-    <div className="space-y-4">
-      {/* Stats Bar */}
-      <div className="glass rounded-xl p-3 flex justify-between items-center">
-        <div className="flex gap-4 text-sm">
-          <span>⚔️ {totalKills}</span>
-          <span>👹 {bossKills}</span>
-        </div>
-        <div className="text-sm text-gray-400">
-          Earned: 💎 {tokens.totalEarned.toLocaleString()}
-        </div>
-      </div>
-      
-      {/* Hero Status */}
-      <div className="glass rounded-2xl p-4">
-        <div className="flex items-center gap-4">
-          <motion.div
-            animate={isAttacking ? { x: [0, 50, 0] } : { y: [0, -5, 0] }}
-            transition={{ duration: isAttacking ? 0.3 : 2, repeat: Infinity }}
-            className="text-5xl"
-          >
-            {MONSTER_DATA[hero.class as keyof typeof MONSTER_DATA]?.emoji || '🦸'}
-          </motion.div>
-          <div className="flex-1">
-            <div className="flex justify-between mb-1">
-              <span className="font-bold">{hero.name}</span>
-              <span className="text-primary">Lv.{hero.level}</span>
-            </div>
-            {/* HP Bar */}
-            <div className="h-3 bg-gray-700 rounded-full overflow-hidden mb-2">
-              <motion.div
-                className="h-full bg-gradient-to-r from-red-500 to-green-500"
-                style={{ width: `${(hero.hp / hero.maxHp) * 100}%` }}
-                animate={{ opacity: hero.hp < hero.maxHp * 0.3 ? [1, 0.5, 1] : 1 }}
-                transition={{ duration: 0.5, repeat: hero.hp < hero.maxHp * 0.3 ? Infinity : 0 }}
-              />
-            </div>
-            {/* EXP Bar */}
-            <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-primary to-secondary"
-                style={{ width: `${(hero.exp / hero.expToNext) * 100}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>HP: {hero.hp}/{hero.maxHp}</span>
-              <span>EXP: {hero.exp}/{hero.expToNext}</span>
-            </div>
-          </div>
+    <div className="p-4 max-w-lg mx-auto">
+      {/* Monster Selection */}
+      <div className="mb-4">
+        <p className="text-xs text-slate-400 mb-2">Select Monster</p>
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {MONSTERS.map((m, idx) => (
+            <button
+              key={m.id}
+              onClick={() => setCurrentMonster(idx)}
+              disabled={isInBattle}
+              className={`flex-shrink-0 p-3 rounded-lg border transition-all ${
+                currentMonster === idx
+                  ? 'border-purple-500 bg-purple-500/20'
+                  : 'border-slate-700 bg-slate-800/50'
+              } ${isInBattle ? 'opacity-50' : ''}`}
+            >
+              <span className="text-2xl">{m.emoji}</span>
+              <p className="text-xs text-white mt-1">{m.name}</p>
+              <p className="text-xs text-slate-400">Lv.{m.level}</p>
+            </button>
+          ))}
         </div>
       </div>
-      
+
       {/* Battle Arena */}
-      <div className="relative glass rounded-2xl p-6 min-h-[200px] flex items-center justify-center">
-        <AnimatePresence mode="wait">
-          {currentMonster ? (
+      <div className="relative bg-slate-800/50 rounded-2xl p-4 border border-slate-700 mb-4">
+        {/* Hero */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-center">
             <motion.div
-              key={currentMonster.id}
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ 
-                opacity: 1, 
-                scale: 1,
-                x: isAttacking ? [0, -20, 0] : 0,
-              }}
-              exit={{ opacity: 0, scale: 0, y: -50 }}
-              className="text-center"
+              animate={isInBattle ? { x: [0, 10, 0] } : {}}
+              transition={{ repeat: Infinity, duration: 0.5 }}
+              className="text-5xl mb-2"
             >
-              <motion.div
-                animate={currentMonster.isBoss ? { 
-                  scale: [1, 1.1, 1],
-                  filter: ['drop-shadow(0 0 10px #f59e0b)', 'drop-shadow(0 0 30px #f59e0b)', 'drop-shadow(0 0 10px #f59e0b)']
-                } : { y: [0, -5, 0] }}
-                transition={{ duration: currentMonster.isBoss ? 1 : 2, repeat: Infinity }}
-                className={`text-7xl mb-2 ${currentMonster.isBoss ? 'text-yellow-400' : ''}`}
-              >
-                {currentMonster.emoji}
-              </motion.div>
-              <div className="font-bold text-lg">{currentMonster.name}</div>
-              <div className="text-sm text-gray-400">Lv.{currentMonster.level}</div>
-              
-              {/* Monster HP */}
-              <div className="mt-3 w-48">
-                <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div
-                    className={`h-full ${currentMonster.isBoss ? 'bg-gradient-to-r from-yellow-500 to-red-500' : 'bg-red-500'}`}
-                    initial={{ width: '100%' }}
-                    animate={{ width: `${(currentMonster.hp / currentMonster.maxHp) * 100}%` }}
-                  />
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  HP: {currentMonster.hp.toLocaleString()} / {currentMonster.maxHp.toLocaleString()}
-                </div>
-              </div>
+              {HERO_CLASS_DATA[hero.class]?.emoji}
             </motion.div>
-          ) : (
+            <p className="text-sm font-bold">{hero.name}</p>
+            <p className="text-xs text-slate-400">HP: {heroHp}/{heroStats.maxHp}</p>
+            <div className="w-20 h-2 bg-slate-700 rounded-full mt-1 overflow-hidden">
+              <div 
+                className="h-full bg-green-500 transition-all duration-300"
+                style={{ width: `${(heroHp / heroStats.maxHp) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="text-2xl">⚔️</div>
+
+          {/* Monster */}
+          <div className="text-center">
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center text-gray-400"
+              animate={isInBattle ? { x: [0, -10, 0] } : {}}
+              transition={{ repeat: Infinity, duration: 0.5 }}
+              className="text-5xl mb-2"
             >
-              <div className="text-4xl mb-2">🔍</div>
-              <p>Finding next opponent...</p>
+              {monster?.emoji}
             </motion.div>
-          )}
-        </AnimatePresence>
-        
-        {/* Battle Result */}
-        <AnimatePresence>
-          {showResult && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.5, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.5 }}
-              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl"
-            >
-              <div className="text-center">
-                <div className="text-4xl mb-2">🎉</div>
-                <div className="text-xl font-bold text-green-400 mb-2">Victory!</div>
-                <div className="text-sm">
-                  <div className="text-primary">+{lastReward.crystal} 💎</div>
-                  <div className="text-secondary">+{lastReward.exp} EXP</div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      
-      {/* Battle Log */}
-      {battleLog.length > 0 && (
-        <div className="glass rounded-xl p-3 max-h-32 overflow-y-auto">
-          <div className="text-xs text-gray-400 mb-2">Battle Log</div>
-          <div className="space-y-1">
-            {battleLog.slice(-5).map((log) => (
-              <div key={log.id} className={`text-xs ${log.attacker === 'hero' ? 'text-primary' : 'text-red-400'}`}>
-                {log.attacker === 'hero' ? '⚔️' : '👹'} {log.attacker === 'hero' ? 'Hero' : 'Monster'} 
-                {log.isCrit ? ' CRIT!' : ''} dealt {log.damage} damage
-              </div>
-            ))}
+            <p className="text-sm font-bold">{monster?.name}</p>
+            <p className="text-xs text-slate-400">HP: {enemyHp}/{monster?.hp}</p>
+            <div className="w-20 h-2 bg-slate-700 rounded-full mt-1 overflow-hidden">
+              <div 
+                className="h-full bg-red-500 transition-all duration-300"
+                style={{ width: `${(enemyHp / (monster?.hp || 1)) * 100}%` }}
+              />
+            </div>
           </div>
         </div>
-      )}
-      
-      {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3">
-        <motion.button
-          onClick={handleAttack}
-          disabled={!currentMonster || hero.hp <= 0 || isAttacking}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className={`py-4 rounded-xl font-bold text-lg
-            ${currentMonster && hero.hp > 0
-              ? 'bg-gradient-to-r from-primary to-secondary' 
-              : 'bg-gray-700 cursor-not-allowed'}`}
-        >
-          {isAttacking ? '⚔️ Attacking...' : '⚔️ Attack'}
-        </motion.button>
-        
-        <motion.button
-          onClick={toggleAutoBattle}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className={`py-4 rounded-xl font-bold text-lg glass
-            ${isAutoBattle ? 'border-2 border-primary bg-primary/20' : ''}`}
-        >
-          {isAutoBattle ? '🛑 Stop' : '🔄 Auto'}
-        </motion.button>
+
+        {/* Battle Log */}
+        <div className="h-24 overflow-y-auto bg-slate-900/50 rounded-lg p-2 text-xs">
+          {battleLog.map((log, idx) => (
+            <p key={idx} className="text-slate-300">{log}</p>
+          ))}
+          {!isInBattle && battleLog.length === 0 && (
+            <p className="text-slate-500 text-center">Ready for battle!</p>
+          )}
+        </div>
       </div>
-      
-      {/* Hero Died */}
+
+      {/* Controls */}
+      <div className="flex gap-3">
+        <button
+          onClick={() => setIsAutoBattle(!isAutoBattle)}
+          className={`flex-1 py-3 rounded-xl font-medium ${
+            isAutoBattle 
+              ? 'bg-green-600 text-white' 
+              : 'bg-slate-700 text-slate-300'
+          }`}
+        >
+          {isAutoBattle ? '🔄 Auto ON' : '⏸️ Auto OFF'}
+        </button>
+        <button
+          onClick={startBattle}
+          disabled={isInBattle}
+          className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl font-bold text-white disabled:opacity-50"
+        >
+          {isInBattle ? '⚔️ Fighting...' : '⚔️ Battle'}
+        </button>
+      </div>
+
+      {/* Battle Result Modal */}
       <AnimatePresence>
-        {hero.hp <= 0 && (
+        {showResult && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowResult(false)}
           >
-            <div className="text-center glass rounded-2xl p-8">
-              <div className="text-6xl mb-4">💀</div>
-              <h2 className="text-2xl font-bold mb-2">Hero Fallen!</h2>
-              <p className="text-gray-400 mb-6">Your hero needs rest...</p>
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-800 rounded-2xl p-6 text-center max-w-sm w-full border border-slate-700"
+            >
+              <div className="text-6xl mb-4">
+                {battleResult === 'win' ? '🏆' : '💀'}
+              </div>
+              <h2 className="text-2xl font-bold mb-2">
+                {battleResult === 'win' ? 'Victory!' : 'Defeat!'}
+              </h2>
+              {battleResult === 'win' && (
+                <div className="text-slate-300 mb-4">
+                  <p>+{monster?.tokenReward} PIXEL</p>
+                  <p>+{monster?.xpReward} XP</p>
+                  <p>+{monster?.goldReward} Gold</p>
+                </div>
+              )}
               <button
-                onClick={() => {
-                  useGameStore.getState().updateHero({ hp: hero.maxHp })
-                  spawnMonster()
-                }}
-                className="px-8 py-3 rounded-xl bg-gradient-to-r from-primary to-secondary font-bold"
+                onClick={() => setShowResult(false)}
+                className="w-full py-3 bg-purple-600 rounded-xl font-bold"
               >
-                Revive (Full HP)
+                Continue
               </button>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   )
 }
+
+// Import at top
+import { HERO_CLASS_DATA } from '@/store/gameStore'

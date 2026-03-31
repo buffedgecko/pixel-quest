@@ -4,176 +4,131 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useGameStore, HERO_CLASS_DATA, type HeroClass } from '@/store/gameStore'
-import WalletButton from '@/components/ui/WalletButton'
+import { ClientLayout } from '../ClientLayout'
 
 export default function CreatePage() {
-  const router = useRouter()
-  const { createHero, isConnected } = useGameStore()
-  const [step, setStep] = useState<'name' | 'class' | 'confirm'>('name')
-  const [name, setName] = useState('')
-  const [selectedClass, setSelectedClass] = useState<HeroClass | null>(null)
-  
-  const handleCreate = () => {
-    if (name && selectedClass) {
-      createHero(name, selectedClass)
-      router.replace('/game')
-    }
-  }
-  
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f0f1a] via-[#1a1a2e] to-[#0f0f1a] p-4">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-2xl font-bold gradient-text">⚔️ Pixel Quest</div>
-        <WalletButton />
-      </div>
-      
-      {/* Title */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
-      >
-        <h1 className="text-3xl font-bold mb-2">Create Your Hero</h1>
-        <p className="text-gray-400">Choose your destiny</p>
-      </motion.div>
-      
-      <AnimatePresence mode="wait">
-        {/* Step 1: Name */}
-        {step === 'name' && (
-          <motion.div
-            key="name"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="space-y-6"
-          >
-            <div className="glass rounded-2xl p-6">
-              <label className="block text-sm text-gray-400 mb-2">Hero Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your hero name..."
-                maxLength={20}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary transition"
-              />
-            </div>
-            
-            <button
-              onClick={() => name.trim() && setStep('class')}
-              disabled={!name.trim()}
-              className="w-full py-4 rounded-xl font-bold text-lg transition
-                ${name.trim() 
-                  ? 'bg-gradient-to-r from-primary to-secondary hover:opacity-90' 
-                  : 'bg-gray-700 cursor-not-allowed'}"
+    <ClientLayout>
+      <CreateContent />
+    </ClientLayout>
+  )
+}
+
+function CreateContent() {
+  const router = useRouter()
+  const { createHero } = useGameStore()
+  const [step, setStep] = useState<'class' | 'name'>('class')
+  const [selectedClass, setSelectedClass] = useState<HeroClass | null>(null)
+  const [heroName, setHeroName] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleCreateHero = async () => {
+    if (!selectedClass || !heroName.trim()) return
+    
+    setIsLoading(true)
+    createHero(heroName.trim(), selectedClass)
+    
+    setTimeout(() => {
+      router.push('/game/')
+    }, 500)
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 p-4">
+      <div className="max-w-md mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-white mb-2">Create Your Hero</h1>
+          <p className="text-slate-400 text-sm">
+            {step === 'class' ? 'Choose your class' : 'Name your hero'}
+          </p>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {step === 'class' ? (
+            <motion.div
+              key="class"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="space-y-4"
             >
-              Continue
-            </button>
-          </motion.div>
-        )}
-        
-        {/* Step 2: Class Selection */}
-        {step === 'class' && (
-          <motion.div
-            key="class"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="space-y-4"
-          >
-            {Object.entries(HERO_CLASS_DATA).map(([key, data]) => (
-              <motion.button
-                key={key}
-                onClick={() => setSelectedClass(key as HeroClass)}
-                className={`w-full p-4 rounded-xl text-left transition
-                  ${selectedClass === key 
-                    ? 'bg-primary/20 border-2 border-primary' 
-                    : 'glass hover:bg-white/10'}`}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-4xl">{data.emoji}</span>
-                  <div>
-                    <div className="font-bold" style={{ color: data.color }}>{data.name}</div>
-                    <div className="text-sm text-gray-400">{data.description}</div>
-                    <div className="flex gap-4 mt-2 text-xs">
-                      <span>HP: {data.baseHp}</span>
-                      <span>ATK: {data.baseAttack}</span>
-                      <span>DEF: {data.baseDefense}</span>
-                      <span>CRIT: {Math.floor(data.baseCritRate * 100)}%</span>
+              {Object.entries(HERO_CLASS_DATA).map(([key, data]) => (
+                <motion.button
+                  key={key}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setSelectedClass(key as HeroClass)
+                    setStep('name')
+                  }}
+                  className={`w-full p-4 rounded-xl border transition-all ${
+                    selectedClass === key
+                      ? 'border-purple-500 bg-purple-500/20'
+                      : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="text-4xl">{data.emoji}</span>
+                    <div className="text-left">
+                      <h3 className="font-bold text-white">{data.name}</h3>
+                      <p className="text-xs text-slate-400">{data.description}</p>
+                      <div className="flex gap-2 mt-1 text-xs">
+                        <span className="text-red-400">HP: {data.baseHp}</span>
+                        <span className="text-orange-400">ATK: {data.baseAttack}</span>
+                        <span className="text-blue-400">SPD: {data.baseSpeed}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.button>
-            ))}
-            
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setStep('name')}
-                className="flex-1 py-4 rounded-xl glass font-bold"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => selectedClass && setStep('confirm')}
-                disabled={!selectedClass}
-                className={`flex-1 py-4 rounded-xl font-bold transition
-                  ${selectedClass 
-                    ? 'bg-gradient-to-r from-primary to-secondary' 
-                    : 'bg-gray-700 cursor-not-allowed'}`}
-              >
-                Continue
-              </button>
-            </div>
-          </motion.div>
-        )}
-        
-        {/* Step 3: Confirm */}
-        {step === 'confirm' && selectedClass && (
-          <motion.div
-            key="confirm"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="text-center"
-          >
-            <div className="glass rounded-2xl p-8 mb-6">
-              <div 
-                className="text-8xl mb-4 animate-float"
-                style={{ filter: `drop-shadow(0 0 20px ${HERO_CLASS_DATA[selectedClass].color})` }}
-              >
-                {HERO_CLASS_DATA[selectedClass].emoji}
+                </motion.button>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="name"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6"
+            >
+              {/* Selected Class */}
+              <div className="text-center p-4 bg-slate-800/50 rounded-xl border border-slate-700">
+                <span className="text-5xl">{HERO_CLASS_DATA[selectedClass!].emoji}</span>
+                <p className="text-slate-400 mt-2">{HERO_CLASS_DATA[selectedClass!].name}</p>
               </div>
-              <h2 className="text-2xl font-bold mb-1">{name}</h2>
-              <p className="text-gray-400">{HERO_CLASS_DATA[selectedClass].name}</p>
-              
-              <div className="mt-6 p-4 bg-primary/10 rounded-xl">
-                <p className="text-sm text-gray-300">
-                  Your journey begins now. Battle monsters, earn 💎 Crystals, 
-                  and convert them to $PIXEL tokens at launch!
-                </p>
+
+              {/* Name Input */}
+              <div>
+                <input
+                  type="text"
+                  value={heroName}
+                  onChange={(e) => setHeroName(e.target.value)}
+                  placeholder="Enter hero name..."
+                  maxLength={20}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                />
               </div>
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setStep('class')}
-                className="flex-1 py-4 rounded-xl glass font-bold"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleCreate}
-                className="flex-1 py-4 rounded-xl bg-gradient-to-r from-primary to-secondary font-bold"
-              >
-                Start Adventure! ⚔️
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep('class')}
+                  className="flex-1 py-3 bg-slate-700 rounded-xl text-white font-medium"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={handleCreateHero}
+                  disabled={!heroName.trim() || isLoading}
+                  className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-pink-600 rounded-xl text-white font-bold disabled:opacity-50"
+                >
+                  {isLoading ? 'Creating...' : 'Create Hero'}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

@@ -2,155 +2,118 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useGameStore, SHOP_ITEMS, generateEquipment } from '@/store/gameStore'
-import type { ShopItem } from '@/types/game'
-
-type Category = 'all' | 'egg' | 'equipment' | 'potion' | 'special'
+import { useGameStore, SHOP_ITEMS, type ShopItem } from '@/store/gameStore'
 
 export default function ShopPage() {
-  const { tokens, spendCrystal, addCrystal, addToInventory, addTransaction, hero } = useGameStore()
-  const [category, setCategory] = useState<Category>('all')
-  const [purchaseItem, setPurchaseItem] = useState<ShopItem | null>(null)
-  
-  const filteredItems = category === 'all' 
+  const { hero, buyItem } = useGameStore()
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [showPurchase, setShowPurchase] = useState(false)
+  const [purchasedItem, setPurchasedItem] = useState<ShopItem | null>(null)
+
+  if (!hero) return null
+
+  const categories = [
+    { id: 'all', label: 'All', emoji: '📦' },
+    { id: 'equipment', label: 'Equipment', emoji: '⚔️' },
+    { id: 'consumable', label: 'Items', emoji: '🧪' },
+  ]
+
+  const filteredItems = selectedCategory === 'all' 
     ? SHOP_ITEMS 
-    : SHOP_ITEMS.filter(item => item.category === category)
-  
-  const handlePurchase = (item: ShopItem) => {
-    const price = item.crystalPrice || Math.floor(item.price / 10)
-    
-    if (tokens.crystal < price) {
-      return
-    }
-    
-    if (spendCrystal(price)) {
-      // Generate reward
-      if (item.category === 'egg' && item.rarity) {
-        const equipment = generateEquipment(item.rarity)
-        addToInventory({
-          id: `inv_${Date.now()}`,
-          itemId: equipment.id,
-          type: 'equipment',
-          quantity: 1,
-          data: equipment,
-        })
-      } else if (item.category === 'special') {
-        // Add special item to inventory
-        addToInventory({
-          id: `inv_${Date.now()}`,
-          itemId: item.id,
-          type: 'special',
-          quantity: 1,
-          data: item,
-        })
-      }
-      
-      addTransaction('spend', price, `Purchased ${item.name}`)
-      setPurchaseItem(item)
-      
-      setTimeout(() => setPurchaseItem(null), 2000)
+    : SHOP_ITEMS.filter(item => item.category === selectedCategory)
+
+  const handleBuy = (item: ShopItem) => {
+    if (hero.gold >= item.price) {
+      buyItem(item.id)
+      setPurchasedItem(item)
+      setShowPurchase(true)
     }
   }
-  
-  const categories: Category[] = ['all', 'egg', 'potion', 'special']
-  
+
   return (
-    <div className="space-y-4">
-      {/* Balance */}
-      <div className="glass rounded-xl p-4 flex justify-between items-center">
-        <div>
-          <div className="text-sm text-gray-400">Your Balance</div>
-          <div className="text-2xl font-bold text-primary">💎 {tokens.crystal.toLocaleString()}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-400">Total Earned</div>
-          <div className="text-lg text-secondary">{tokens.totalEarned.toLocaleString()}</div>
+    <div className="p-4 max-w-lg mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">🛒 Shop</h1>
+        <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-1">
+          <span>🪙</span>
+          <span className="font-bold text-yellow-400">{hero.gold.toLocaleString()}</span>
         </div>
       </div>
-      
-      {/* Category Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+
+      {/* Categories */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
         {categories.map((cat) => (
           <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`px-4 py-2 rounded-lg whitespace-nowrap transition
-              ${category === cat 
-                ? 'bg-primary text-white' 
-                : 'glass hover:bg-white/10'}`}
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              selectedCategory === cat.id
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-800 text-slate-400'
+            }`}
           >
-            {cat === 'all' ? '📦 All' : 
-             cat === 'egg' ? '🥚 Eggs' :
-             cat === 'potion' ? '🧪 Potions' : '✨ Special'}
+            {cat.emoji} {cat.label}
           </button>
         ))}
       </div>
-      
-      {/* Items */}
+
+      {/* Items Grid */}
       <div className="grid grid-cols-2 gap-3">
         {filteredItems.map((item) => {
-          const price = item.crystalPrice || Math.floor(item.price / 10)
-          const canAfford = tokens.crystal >= price
-          
+          const canAfford = hero.gold >= item.price
           return (
             <motion.div
               key={item.id}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`glass rounded-xl p-4 ${item.rarity ? `rarity-${item.rarity}-bg border` : ''}`}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-slate-800/50 rounded-xl p-3 border border-slate-700"
             >
-              <div className="text-center mb-3">
-                <div className="text-4xl mb-2">{item.emoji}</div>
-                <div className={`font-bold ${item.rarity ? `rarity-${item.rarity}` : ''}`}>
-                  {item.name}
-                </div>
-                {item.rarity && (
-                  <div className={`text-xs rarity-${item.rarity}`}>
-                    {item.rarity.toUpperCase()}
-                  </div>
-                )}
-              </div>
-              
-              <p className="text-xs text-gray-400 text-center mb-3 min-h-[2rem]">
-                {item.description}
-              </p>
+              <div className="text-3xl text-center mb-2">{item.emoji}</div>
+              <h3 className="font-bold text-sm text-center">{item.name}</h3>
+              <p className="text-xs text-slate-400 text-center mb-2 line-clamp-2">{item.description}</p>
               
               <button
-                onClick={() => handlePurchase(item)}
+                onClick={() => handleBuy(item)}
                 disabled={!canAfford}
-                className={`w-full py-2 rounded-lg text-sm font-bold transition
-                  ${canAfford 
-                    ? 'bg-gradient-to-r from-primary to-secondary' 
-                    : 'bg-gray-700 cursor-not-allowed'}`}
+                className={`w-full py-2 rounded-lg text-sm font-medium ${
+                  canAfford
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-slate-700 text-slate-500'
+                }`}
               >
-                💎 {price.toLocaleString()}
+                🪙 {item.price.toLocaleString()}
               </button>
             </motion.div>
           )
         })}
       </div>
-      
-      {/* Purchase Success Modal */}
+
+      {/* Purchase Modal */}
       <AnimatePresence>
-        {purchaseItem && (
+        {showPurchase && purchasedItem && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowPurchase(false)}
           >
             <motion.div
-              initial={{ scale: 0.5, y: 50 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.5 }}
-              className="glass rounded-2xl p-8 text-center"
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-slate-800 rounded-2xl p-6 text-center max-w-sm w-full border border-slate-700"
             >
-              <div className="text-6xl mb-4">{purchaseItem.emoji}</div>
-              <h3 className="text-xl font-bold mb-2">Purchase Successful!</h3>
-              <p className="text-gray-400">{purchaseItem.name}</p>
-              {purchaseItem.category === 'egg' && (
-                <p className="text-sm text-primary mt-2">Check your inventory! 🎁</p>
-              )}
+              <div className="text-6xl mb-4">{purchasedItem.emoji}</div>
+              <h2 className="text-xl font-bold mb-2">Purchased!</h2>
+              <p className="text-slate-400 mb-4">{purchasedItem.name}</p>
+              <button
+                onClick={() => setShowPurchase(false)}
+                className="w-full py-3 bg-purple-600 rounded-xl font-bold"
+              >
+                Continue
+              </button>
             </motion.div>
           </motion.div>
         )}

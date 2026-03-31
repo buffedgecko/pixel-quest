@@ -1,18 +1,17 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
-import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
-import WalletButton from '@/components/ui/WalletButton'
+import { ClientLayout } from '../ClientLayout'
 
 const navItems = [
-  { path: '/game', icon: '⚔️', label: 'Battle' },
-  { path: '/game/hero', icon: '🦸', label: 'Hero' },
-  { path: '/game/shop', icon: '🏪', label: 'Shop' },
-  { path: '/game/quest', icon: '📜', label: 'Quest' },
-  { path: '/game/wallet', icon: '💎', label: 'Wallet' },
+  { path: '/game/', icon: '⚔️', label: 'Battle' },
+  { path: '/game/hero/', icon: '🛡️', label: 'Hero' },
+  { path: '/game/shop/', icon: '🛒', label: 'Shop' },
+  { path: '/game/quest/', icon: '📜', label: 'Quest' },
+  { path: '/game/wallet/', icon: '💎', label: 'Wallet' },
 ]
 
 export default function GameLayout({
@@ -20,65 +19,81 @@ export default function GameLayout({
 }: {
   children: React.ReactNode
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const { hasHero, tokens, hero } = useGameStore()
-  
-  // Redirect if no hero
-  useEffect(() => {
-    if (!hasHero) {
-      router.replace('/create')
-    }
-  }, [hasHero, router])
-  
-  if (!hasHero) return null
-  
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0f0f1a] via-[#1a1a2e] to-[#0f0f1a] flex flex-col">
+    <ClientLayout>
+      <GameContent>{children}</GameContent>
+    </ClientLayout>
+  )
+}
+
+function GameContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const { hero, isLoading } = useGameStore()
+
+  useEffect(() => {
+    if (!hero && !isLoading) {
+      router.replace('/create/')
+    }
+  }, [hero, isLoading, router])
+
+  if (!hero) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="text-purple-400 animate-pulse">Loading...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col pb-20">
       {/* Header */}
-      <header className="flex justify-between items-center p-4 glass border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="text-2xl font-bold gradient-text">Pixel Quest</div>
-          {hero && (
-            <div className="text-sm text-gray-400">
-              Lv.{hero.level} {HERO_CLASS_DATA[hero.class]?.emoji}
+      <header className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur border-b border-slate-800 p-3">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{HERO_CLASS_DATA[hero.class]?.emoji}</span>
+            <div>
+              <p className="font-bold text-white text-sm">{hero.name}</p>
+              <p className="text-xs text-slate-400">Lv.{hero.level}</p>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="glass px-3 py-1 rounded-full text-sm">
-            💎 {tokens.crystal.toLocaleString()}
           </div>
-          <WalletButton />
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-1">
+              <span>💎</span>
+              <span className="text-purple-400 font-bold">{hero.pixelTokens.toLocaleString()}</span>
+            </div>
+          </div>
         </div>
       </header>
-      
-      {/* Content */}
-      <main className="flex-1 overflow-y-auto p-4 pb-24">
-        {children}
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <motion.div
+          key={pathname}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          {children}
+        </motion.div>
       </main>
-      
+
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 glass border-t border-white/10">
-        <div className="flex justify-around py-2">
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 z-30">
+        <div className="flex justify-around max-w-lg mx-auto">
           {navItems.map((item) => {
             const isActive = pathname === item.path
             return (
-              <Link
+              <button
                 key={item.path}
-                href={item.path}
-                className="flex flex-col items-center py-2 px-4"
+                onClick={() => router.push(item.path)}
+                className={`flex flex-col items-center py-2 px-4 ${
+                  isActive ? 'text-purple-400' : 'text-slate-500'
+                }`}
               >
-                <motion.div
-                  animate={{ scale: isActive ? 1.1 : 1 }}
-                  className={`text-2xl ${isActive ? '' : 'opacity-60'}`}
-                >
-                  {item.icon}
-                </motion.div>
-                <span className={`text-xs mt-1 ${isActive ? 'text-primary' : 'text-gray-400'}`}>
-                  {item.label}
-                </span>
-              </Link>
+                <span className="text-xl">{item.icon}</span>
+                <span className="text-xs mt-1">{item.label}</span>
+              </button>
             )
           })}
         </div>
@@ -87,5 +102,5 @@ export default function GameLayout({
   )
 }
 
-// Import HERO_CLASS_DATA
+// Import at top
 import { HERO_CLASS_DATA } from '@/store/gameStore'

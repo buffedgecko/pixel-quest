@@ -1,14 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { Providers } from './providers'
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Pixel Quest - Idle RPG Adventure',
-  description: 'Telegram Mini App with TON wallet integration. Battle monsters, earn crystals, convert to $PIXEL tokens!',
-  icons: {
-    icon: '/favicon.svg',
-    apple: '/favicon.svg',
-  },
+  description: 'Telegram Mini App RPG with TON rewards',
+  manifest: '/tonconnect-manifest.json',
 }
 
 export const viewport: Viewport = {
@@ -16,7 +12,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#0f0f1a',
+  themeColor: '#8b5cf6',
 }
 
 export default function RootLayout({
@@ -29,8 +25,8 @@ export default function RootLayout({
       <head>
         <script src="https://telegram.org/js/telegram-web-app.js" async></script>
       </head>
-      <body>
-        <Providers>{children}</Providers>
+      <body className="bg-slate-950 text-white antialiased">
+        {children}
       </body>
     </html>
   )
